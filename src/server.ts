@@ -7,7 +7,9 @@ const app = express();
 
 // Middleware
 app.use(cors()); // Enable CORS for all routes
-app.use(express.json()); // Parse JSON request bodies
+// Increase JSON payload limit to handle large base64 images (50MB limit)
+app.use(express.json({ limit: '50mb' })); // Parse JSON request bodies
+app.use(express.urlencoded({ extended: true, limit: '50mb' })); // Parse URL-encoded bodies
 
 // Health check endpoint
 app.get('/health', (req: Request, res: Response) => {

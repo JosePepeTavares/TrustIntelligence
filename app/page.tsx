@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { CountryFilter, filterOptions } from "@/components/CountryFilter";
 import { NetworkGraph } from "@/components/NetworkGraph";
@@ -53,7 +53,7 @@ export default function Home() {
     });
   };
 
-  const handleToggleFactor = (factorName: string) => {
+  const handleToggleFactor = useCallback((factorName: string) => {
     setSelectedCountries((prev) => {
       const newSelection = prev.includes(factorName)
         ? prev.filter((f) => f !== factorName)
@@ -69,7 +69,7 @@ export default function Home() {
       
       return newSelection;
     });
-  };
+  }, []);
 
   const handleSimulationFactorChange = (value: "all" | "custom") => {
     setSimulationFactorMode(value);
@@ -79,57 +79,155 @@ export default function Home() {
     // When switching to "custom", keep current selection
   };
 
-  const handleSimulate = async (postText: string) => {
+  // Helper function to convert file to base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
+  const handleSimulate = async (postText: string, imageFile?: File) => {
     setIsSimulating(true);
     setSimulationComplete(false);
     setSimulationResults(null);
 
-    // Simulate AI processing time (3-5 seconds)
-    const simulationTime = 3000 + Math.random() * 2000;
-    
-    await new Promise((resolve) => setTimeout(resolve, simulationTime));
+    try {
+      // Convert image to base64 if provided
+      let imageBase64: string | undefined;
+      let imageMimeType: string | undefined;
+      
+      if (imageFile) {
+        imageBase64 = await fileToBase64(imageFile);
+        imageMimeType = imageFile.type;
+      }
 
-    // Generate mock results
-    const prediction = 79;
-    const lowerEstimate = 43;
-    const upperEstimate = 158;
-    
-    const variants: Variant[] = [
-      {
-        id: "original",
-        text: postText.length > 50 ? postText.substring(0, 50) + "..." : postText,
-        score: prediction,
-        isOriginal: true,
-      },
-      {
-        id: "variant-1",
-        text: "After my talk at Building Green D...",
-        score: 95,
-      },
-      {
-        id: "variant-2",
-        text: "Since my talk at Building Green D...",
-        score: 94,
-      },
-      {
-        id: "variant-3",
-        text: "What an amazing response since...",
-        score: 93,
-      },
-    ];
+      // Call the LinkedIn post evaluation API
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      const response = await fetch(`${apiUrl}/api/evaluate-linkedin-post`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          post_text: postText,
+          imageBase64,
+          imageMimeType,
+        }),
+      });
 
-    const insights = "The post's predicted performance is decent, but not outstanding.";
+      if (!response.ok) {
+        let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+        try {
+          const errorData = await response.json();
+          errorMessage = errorData.message || errorData.error || errorMessage;
+        } catch {
+          // If response is not JSON, try to get text
+          try {
+            const errorText = await response.text();
+            if (errorText) {
+              errorMessage = errorText;
+            }
+          } catch {
+            // Use the default error message
+          }
+        }
+        throw new Error(errorMessage);
+      }
 
-    setSimulationResults({
-      prediction,
-      lowerEstimate,
-      upperEstimate,
-      variants,
-      insights,
-    });
+      const data = await response.json();
+      const result = data.result;
 
-    setIsSimulating(false);
-    setSimulationComplete(true);
+      // Handle case where result might be a string (if JSON parsing failed on server)
+      let parsedResult = result;
+      if (typeof result === 'string') {
+        try {
+          parsedResult = JSON.parse(result);
+        } catch {
+          // If it's still not JSON, use the raw result
+          parsedResult = { raw: result };
+        }
+      }
+
+      // Extract scores and variants from the response
+      const scores = parsedResult.scores || {};
+      const overallScore = parsedResult.overall_score || 0;
+      // Ensure insights is a meaningful string
+      const insights = parsedResult.insights 
+        ? String(parsedResult.insights).trim() 
+        : 'No insights available. Please try again.';
+      const improvementVariants = parsedResult.improvement_variants || [];
+
+      // Calculate estimates based on scores (simple approach)
+      const scoreValues = Object.values(scores) as number[];
+      const avgScore = scoreValues.length > 0
+        ? scoreValues.reduce((a, b) => a + b, 0) / scoreValues.length
+        : overallScore;
+      
+      const prediction = Math.round(overallScore);
+      const lowerEstimate = Math.max(0, Math.round(prediction * 0.5));
+      const upperEstimate = Math.min(200, Math.round(prediction * 1.5));
+
+      // Build variants array
+      const variants: Variant[] = [
+        {
+          id: "original",
+          text: postText.length > 100 ? postText.substring(0, 100) + "..." : postText,
+          score: prediction,
+          isOriginal: true,
+        },
+        ...improvementVariants.map((variant: any, index: number) => ({
+          id: `variant-${index + 1}`,
+          text: variant.variant_text || variant.text || '',
+          score: variant.estimated_overall_score || variant.score || 0,
+        })),
+      ];
+
+      setSimulationResults({
+        prediction,
+        lowerEstimate,
+        upperEstimate,
+        variants,
+        insights,
+      });
+
+      setIsSimulating(false);
+      setSimulationComplete(true);
+    } catch (error: any) {
+      console.error('Error simulating post:', error);
+      
+      // Fallback to mock data on error (for development)
+      const prediction = 79;
+      const lowerEstimate = 43;
+      const upperEstimate = 158;
+      
+      const variants: Variant[] = [
+        {
+          id: "original",
+          text: postText.length > 50 ? postText.substring(0, 50) + "..." : postText,
+          score: prediction,
+          isOriginal: true,
+        },
+        {
+          id: "variant-1",
+          text: "Error: Could not generate variants. Please try again.",
+          score: 0,
+        },
+      ];
+
+      setSimulationResults({
+        prediction,
+        lowerEstimate,
+        upperEstimate,
+        variants,
+        insights: `Error: ${error.message}. Please check your API connection and try again.`,
+      });
+
+      setIsSimulating(false);
+      setSimulationComplete(true);
+    }
   };
 
   const handleGenerateVariants = async (instructions?: string) => {
