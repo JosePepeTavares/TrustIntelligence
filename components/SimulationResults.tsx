@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Info, Copy, Download, RefreshCw } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Info, Copy, RefreshCw } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ interface SimulationResultsProps {
   onGenerateVariants: (instructions?: string) => void;
   factorScores?: FactorScore[];
   selectedFactors?: string[];
+  scores?: Record<string, number>;
 }
 
 export function SimulationResults({
@@ -39,9 +40,13 @@ export function SimulationResults({
   onGenerateVariants,
   factorScores = [],
   selectedFactors = [],
+  scores = {},
 }: SimulationResultsProps) {
   const [selectedVariant, setSelectedVariant] = useState<Variant | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
+  const [imagePrompt, setImagePrompt] = useState<string | null>(null);
+  const [loadingPrompt, setLoadingPrompt] = useState(false);
 
   const handleCopyText = async () => {
     if (selectedVariant) {
@@ -51,35 +56,52 @@ export function SimulationResults({
     }
   };
 
-  const handleDownloadImage = () => {
-    // Create a canvas or use the image element to download
-    // For now, we'll create a placeholder download
-    const canvas = document.createElement('canvas');
-    canvas.width = 800;
-    canvas.height = 600;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      ctx.fillStyle = '#1a1a1a';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '24px Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText('Suggested Image', canvas.width / 2, canvas.height / 2);
-      
-      canvas.toBlob((blob) => {
-        if (blob) {
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = `variant-image-${selectedVariant?.id || 'image'}.png`;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }
-      });
+  const handleCopyPrompt = async () => {
+    if (imagePrompt) {
+      await navigator.clipboard.writeText(imagePrompt);
+      setCopiedPrompt(true);
+      setTimeout(() => setCopiedPrompt(false), 2000);
     }
   };
+
+  // Fetch image prompt when variant is selected
+  useEffect(() => {
+    if (selectedVariant && !selectedVariant.isOriginal) {
+      setLoadingPrompt(true);
+      setImagePrompt(null);
+      
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+      fetch(`${apiUrl}/api/suggest-image-prompt`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          post_text: selectedVariant.text,
+          scores: scores,
+          overall_score: selectedVariant.score,
+          insights: insights,
+        }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data.result && data.result.image_prompt) {
+            setImagePrompt(data.result.image_prompt);
+          } else {
+            setImagePrompt('Unable to generate image prompt. Please try again.');
+          }
+        })
+        .catch((error) => {
+          console.error('Error fetching image prompt:', error);
+          setImagePrompt('Error generating image prompt. Please try again.');
+        })
+        .finally(() => {
+          setLoadingPrompt(false);
+        });
+    } else {
+      setImagePrompt(null);
+    }
+  }, [selectedVariant, scores, insights]);
 
   const handleRemixEverything = () => {
     if (selectedVariant) {
@@ -237,35 +259,79 @@ export function SimulationResults({
           </DialogHeader>
           {selectedVariant && (
             <div className="space-y-4 mt-4">
-              {/* Suggested Image with Download Icon */}
-              <div className="relative w-full h-64 bg-muted/30 rounded-lg overflow-hidden border border-border group">
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className="text-center space-y-2">
-                    <div className="w-16 h-16 mx-auto bg-muted/50 rounded-lg flex items-center justify-center">
-                      <svg
-                        className="w-8 h-8 text-muted-foreground"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
-                        />
-                      </svg>
-                    </div>
-                    <p className="text-sm text-muted-foreground">Suggested Image</p>
-                  </div>
+              {/* Suggested Image Prompt */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium text-foreground">Suggested Image Prompt</h4>
+                  {imagePrompt && (
+                    <button
+                      onClick={handleCopyPrompt}
+                      className="p-1.5 hover:bg-muted/30 rounded-lg transition-colors"
+                      title="Copy image prompt"
+                    >
+                      {copiedPrompt ? (
+                        <span className="text-xs text-green-500">Copied!</span>
+                      ) : (
+                        <Copy className="h-4 w-4 text-foreground" />
+                      )}
+                    </button>
+                  )}
                 </div>
-                <button
-                  onClick={handleDownloadImage}
-                  className="absolute top-3 right-3 p-2 bg-background/80 hover:bg-background border border-border rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                  title="Download image"
-                >
-                  <Download className="h-4 w-4 text-foreground" />
-                </button>
+                <div className="relative w-full min-h-48 bg-muted/30 rounded-lg overflow-hidden border border-border">
+                  {loadingPrompt ? (
+                    <div className="absolute inset-0 flex items-center justify-center p-6">
+                      <div className="text-center space-y-2">
+                        <div className="w-12 h-12 mx-auto bg-muted/50 rounded-lg flex items-center justify-center">
+                          <svg
+                            className="w-6 h-6 text-muted-foreground animate-spin"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                            />
+                          </svg>
+                        </div>
+                        <p className="text-sm text-muted-foreground">Generating prompt...</p>
+                      </div>
+                    </div>
+                  ) : imagePrompt ? (
+                    <div className="p-4">
+                      <p className="text-foreground leading-relaxed whitespace-pre-wrap break-words">{imagePrompt}</p>
+                    </div>
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center p-6">
+                      <div className="text-center space-y-2">
+                        <div className="w-12 h-12 mx-auto bg-muted/50 rounded-lg flex items-center justify-center">
+                          <svg
+                            className="w-6 h-6 text-muted-foreground"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                            />
+                          </svg>
+                        </div>
+                        <p className="text-sm text-muted-foreground">Image prompt will appear here</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </div>
               
               {/* Full Text with Copy Icon */}

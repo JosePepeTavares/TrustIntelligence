@@ -26,6 +26,7 @@ export default function Home() {
     upperEstimate: number;
     variants: Variant[];
     insights: string;
+    scores: Record<string, number>;
   } | null>(null);
 
   // When mode is "all", select all factors
@@ -191,6 +192,7 @@ export default function Home() {
         upperEstimate,
         variants,
         insights,
+        scores,
       });
 
       setIsSimulating(false);
@@ -223,6 +225,7 @@ export default function Home() {
         upperEstimate,
         variants,
         insights: `Error: ${error.message}. Please check your API connection and try again.`,
+        scores: {},
       });
 
       setIsSimulating(false);
@@ -301,6 +304,7 @@ export default function Home() {
                 insights={simulationResults.insights}
                 onGenerateVariants={handleGenerateVariants}
                 selectedFactors={selectedCountries}
+                scores={simulationResults.scores}
               />
             </div>
           )}

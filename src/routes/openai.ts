@@ -454,5 +454,99 @@ Return the result as a JSON array of objects with this structure:
   }
 });
 
+// POST /api/suggest-image-prompt - Generate image prompt based on post variant and scores
+router.post('/suggest-image-prompt', async (req: Request, res: Response) => {
+  try {
+    const { post_text, scores, overall_score, insights } = req.body;
+
+    if (!post_text || typeof post_text !== 'string') {
+      return res.status(400).json({
+        error: 'Invalid request: post_text is required and must be a string',
+      });
+    }
+
+    // Build context about the post's performance
+    let scoreContext = '';
+    if (scores && typeof scores === 'object') {
+      const scoreEntries = Object.entries(scores)
+        .filter(([_, score]) => typeof score === 'number')
+        .map(([factor, score]) => `${factor}: ${score}/100`)
+        .join(', ');
+      if (scoreEntries) {
+        scoreContext = `Current factor scores: ${scoreEntries}. `;
+      }
+    }
+
+    if (overall_score !== undefined) {
+      scoreContext += `Overall score: ${overall_score}/100. `;
+    }
+
+    const prompt = `You are an expert at creating image generation prompts for LinkedIn posts. Based on the following LinkedIn post variant and its performance scores, generate a detailed image prompt that would help improve the post's engagement and trust scores.
+
+LinkedIn Post:
+"${post_text}"
+
+${scoreContext ? `Performance Analysis:\n${scoreContext}` : ''}
+${insights ? `Insights: ${insights}` : ''}
+
+Generate a detailed, professional image prompt that:
+1. Would complement and enhance this LinkedIn post
+2. Is appropriate for a professional audience
+3. Would help improve the post's trust, engagement, and inclusivity scores
+4. Is specific enough to use with image generation tools (DALL-E, Midjourney, Stable Diffusion)
+5. Describes style, mood, composition, colors, and key visual elements
+
+The prompt should be 2-3 sentences and focus on creating an image that would make this post more engaging, trustworthy, and appealing to diverse audiences.
+
+Return the result as a JSON object:
+{
+  "image_prompt": "detailed prompt description here",
+  "key_elements": ["element1", "element2", "element3"],
+  "style_notes": "brief style guidance"
+}`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      temperature: 0.7,
+      response_format: { type: 'json_object' },
+    });
+
+    const content = response.choices[0]?.message?.content || '';
+    
+    let parsedResult;
+    try {
+      parsedResult = JSON.parse(content);
+    } catch {
+      // Fallback if JSON parsing fails
+      parsedResult = {
+        image_prompt: content || 'A professional, engaging image that complements the LinkedIn post content.',
+        key_elements: [],
+        style_notes: '',
+      };
+    }
+
+    res.json({
+      result: parsedResult,
+      model: response.model,
+      usage: response.usage,
+    });
+  } catch (error: any) {
+    console.error('Error in /api/suggest-image-prompt:', error);
+    
+    if (error.response) {
+      return res.status(error.response.status || 500).json({
+        error: 'OpenAI API error',
+        message: error.message,
+      });
+    }
+
+    res.status(500).json({
+      error: 'Internal server error',
+      message: error.message || 'An unexpected error occurred',
+    });
+  }
+});
+
 export default router;
 
