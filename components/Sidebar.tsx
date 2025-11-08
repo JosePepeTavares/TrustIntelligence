@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Image from "next/image";
 import { Settings, Plus, ChevronLeft, ChevronRight } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -21,6 +22,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ selectedFactors, onSimulationFactorChange, simulationFactorMode, isCollapsed, onToggleCollapse, onToggleFactor }: SidebarProps) {
+  const [isSelectOpen, setIsSelectOpen] = useState(false);
+  
   // Determine the display value
   // Show "all" if mode is "all" OR if all factors are selected
   // Show "custom" if mode is "custom" and not all factors are selected
@@ -101,7 +104,12 @@ export function Sidebar({ selectedFactors, onSimulationFactorChange, simulationF
             </label>
             <Select 
               value={displayValue}
-              onValueChange={(value) => onSimulationFactorChange(value as "all" | "custom")}
+              open={isSelectOpen}
+              onOpenChange={setIsSelectOpen}
+              onValueChange={(value) => {
+                onSimulationFactorChange(value as "all" | "custom");
+                setIsSelectOpen(false);
+              }}
             >
               <SelectTrigger className="w-full bg-input/30 text-white">
                 <SelectValue placeholder="Select factors" />
@@ -119,30 +127,41 @@ export function Sidebar({ selectedFactors, onSimulationFactorChange, simulationF
               <label className="mb-3 block text-xs font-medium text-sidebar-foreground/80 uppercase tracking-wide">
                 Select Factors
               </label>
-              <div className="space-y-2 max-h-48 overflow-y-auto">
-                {filterOptions.map((option) => {
-                  const isChecked = selectedFactors.includes(option.name);
-                  return (
-                    <div key={option.name} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`factor-${option.name}`}
-                        checked={isChecked}
-                        onCheckedChange={() => onToggleFactor(option.name)}
-                        className="border-white/30 data-[state=checked]:bg-white data-[state=checked]:text-background data-[state=checked]:border-white"
-                      />
-                      <Label
-                        htmlFor={`factor-${option.name}`}
-                        className="text-sm text-sidebar-foreground cursor-pointer flex items-center gap-2 font-normal"
-                      >
-                        <span
-                          className="h-2 w-2 rounded-full"
-                          style={{ backgroundColor: option.color }}
+              <div className="space-y-2 max-h-48 overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-white/20 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.1)_transparent]">
+                {filterOptions
+                  .map((option, index) => ({ option, index }))
+                  .sort((a, b) => {
+                    const aSelected = selectedFactors.includes(a.option.name);
+                    const bSelected = selectedFactors.includes(b.option.name);
+                    // Selected factors come first
+                    if (aSelected && !bSelected) return -1;
+                    if (!aSelected && bSelected) return 1;
+                    // Maintain original order within each group
+                    return a.index - b.index;
+                  })
+                  .map(({ option }) => {
+                    const isChecked = selectedFactors.includes(option.name);
+                    return (
+                      <div key={option.name} className="flex items-center space-x-2">
+                        <Checkbox
+                          id={`factor-${option.name}`}
+                          checked={isChecked}
+                          onCheckedChange={() => onToggleFactor(option.name)}
+                          className="border-white/30 data-[state=checked]:bg-white data-[state=checked]:text-background data-[state=checked]:border-white"
                         />
-                        {option.name}
-                      </Label>
-                    </div>
-                  );
-                })}
+                        <Label
+                          htmlFor={`factor-${option.name}`}
+                          className="text-sm text-sidebar-foreground cursor-pointer flex items-center gap-2 font-normal"
+                        >
+                          <span
+                            className="h-2 w-2 rounded-full"
+                            style={{ backgroundColor: option.color }}
+                          />
+                          {option.name}
+                        </Label>
+                      </div>
+                    );
+                  })}
               </div>
             </div>
           )}

@@ -20,12 +20,12 @@ export function PostInput({ onSimulate, isSimulating = false }: PostInputProps) 
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <Textarea
         placeholder="Write your post..."
         value={postText}
         onChange={(e) => setPostText(e.target.value)}
-        className="min-h-32 w-full bg-input/30 text-white placeholder:text-white/50"
+        className="min-h-20 max-h-24 w-full bg-input/30 text-white placeholder:text-white/50 resize-none"
         disabled={isSimulating}
       />
       <div className="flex flex-wrap gap-3">

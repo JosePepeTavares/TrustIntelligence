@@ -194,7 +194,7 @@ export default function Home() {
 
           {/* Right: Simulation Results */}
           {simulationComplete && simulationResults && (
-            <div className="w-96 border-l border-border bg-background p-6 overflow-y-auto">
+            <div className="w-96 border-l border-border bg-background p-6 overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-white/10 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-white/20 [scrollbar-width:thin] [scrollbar-color:rgba(255,255,255,0.1)_transparent]">
               <SimulationResults
                 prediction={simulationResults.prediction}
                 lowerEstimate={simulationResults.lowerEstimate}
@@ -202,13 +202,14 @@ export default function Home() {
                 variants={simulationResults.variants}
                 insights={simulationResults.insights}
                 onGenerateVariants={handleGenerateVariants}
+                selectedFactors={selectedCountries}
               />
             </div>
           )}
         </div>
 
         {/* Bottom Section: Post Input */}
-        <div className="border-t border-border bg-background p-6">
+        <div className="border-t border-border bg-background p-4">
           <PostInput onSimulate={handleSimulate} isSimulating={isSimulating} />
         </div>
       </main>
